@@ -1,9 +1,12 @@
-package com.guogai.reflet01;
+package com.guogai.reflect01;
+
+import sun.awt.SunHints;
 
 /**
  * Created by guogai on 2018/1/25.
  */
-public class Person {
+@MyAnnotation(value="guogai")
+public class Person extends Creature<String> implements Comparable,MyInterface {
     public String name;
     private int age;
 
@@ -30,10 +33,11 @@ public class Person {
     public void setAge(int age) {
         this.age = age;
     }
+    @MyAnnotation(value = "8888")
     public void show() {
         System.out.println("我是一个人");
     }
-    public void display(String nation) {
+    public void display(String nation) throws Exception {
         System.out.println("我的国际是：" + nation);
     }
 
@@ -43,5 +47,13 @@ public class Person {
                 "name='" + name + '\'' +
                 ", age=" + age +
                 '}';
+    }
+
+    @Override
+    public int compareTo(Object o) {
+        return 0;
+    }
+    class bird {
+
     }
 }

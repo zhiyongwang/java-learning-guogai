@@ -1,9 +1,7 @@
-package com.guogai.reflet01;
+package com.guogai.reflect01;
 
 import org.junit.Test;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -45,7 +43,7 @@ public class TestReflection {
 
         //方法一：从 指定的路径下获取文件
         ClassLoader loader = this.getClass().getClassLoader();
-        InputStream in = loader.getResourceAsStream("com\\guogai\\reflet01\\jdbc.properties");//获取一个输入流
+        InputStream in = loader.getResourceAsStream("com\\guogai\\reflect01\\jdbc.properties");//获取一个输入流
         //方法二：从当前工程下获取文件
        // FileInputStream in = new FileInputStream(new File("jdbc1.properties"));
         Properties pros = new Properties();
@@ -80,7 +78,7 @@ public class TestReflection {
         System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 
         //3、通过Class的静态方法获取,可能会出现的异常：java.lang.ClassNotFoundException
-        String clazzName = "com.guogai.reflet01.Person";
+        String clazzName = "com.guogai.reflect01.Person";
         Class<?> clazz3 = Class.forName(clazzName);
         System.out.println(clazz3.getName());
         System.out.println(clazz3.getSuperclass());
@@ -148,7 +146,7 @@ public class TestReflection {
     }
     //在没有反射之前，如何创建一个对象，并调用其中的方法
     @Test
-    public void test1() {
+    public void test1() throws Exception {
         Person p = new Person();
         p.setName("guogai");
         p.setAge(66);
