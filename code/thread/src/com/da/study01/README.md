@@ -257,6 +257,348 @@ C:\Users\Administrator>jstack 19676
 #####4.1.5Daemon线程
 
 Daemon线程是一种支持型线程，它主要作用被用作程序中后台调度以及支持性工作。这意味着，当一个JVM虚拟机中不存在Daemon线程的时候，JVM虚拟机将会退出，可以通过调用Thread.setDaemon(true)将线程设置为Daemon线程
-注意：Daemon属性需要在启动线程之前设置，不能在启动线程之后设置。
+- 注意：Daemon属性需要在启动线程之前设置，不能在启动线程之后设置。
+
+Daemon线程被用作完成支持性工作，但是在JVM虚拟机退出时，Daemon线程中的finally块不一定会执行
+```java
+package com.da.study01;
+
+/**
+ * Created by guo on 2018/1/29.
+ */
+public class Daemon {
+    public static void main(String[] args) {
+    Thread thread = new Thread(new DaemonRunner(),"DaemonRunner");
+    thread.setDaemon(true);
+    thread.start();
+    }
+    static class DaemonRunner implements Runnable {
+        @Override
+        public void run() {
+            try {
+                SleepUtil.second(10);
+            } finally {
+                System.out.println("DaemonThread finally run");  //为啥会不执行呢？？？
+            }
+        }
+    }
+}
+
+//没有输出结果
+
+```
+main线程(非Daemon线程)在启动了线程DaemonRunner之后随着main()方法执行完毕而终止，而此时Java虚拟机中已经没有非Daemon线程来，
+虚拟机需要退出，Java虚拟机中所有的Daemon线程都需要立即停止，因此DaemonRunner立即终止，但是DaemonRunner中的finally块并没有执行
+
+注意：在构建Daemon线程时，不能依靠finally块中的内容来确保执行关闭或清理资源的逻辑！
+
+#### 4.2启动和终止线程
+通过调用线程的start()方法进行启动，随着run()方法的执行完毕，线程也随之终止。
+
+##### 4.2.1 构建线程
+
+在运行线程之前需要构建一个线程对象，线程对象在构建的时候需要提供线程所需要有的属性，如线程组、线程优先级、是否是Daemon线程等信息
+
+代码摘自java.lang.Thread中对线程进行初始化部分。
+
+```
+ private void init(ThreadGroup g, Runnable target, String name,
+                      long stackSize, AccessControlContext acc,
+                      boolean inheritThreadLocals) {
+        if (name == null) {
+            throw new NullPointerException("name cannot be null");
+        }
+        this.name = name;
+        //当前线程就是该线程的父线程
+        Thread parent = currentThread();
+        g.addUnstarted();
+        this.group = g;
+        //将daemon、priority属性设置为父线程的对应属性
+        this.daemon = parent.isDaemon();
+        this.priority = parent.getPriority();
+        if (security == null || isCCLOverridden(parent.getClass()))
+            this.contextClassLoader = parent.getContextClassLoader();
+        else
+            this.contextClassLoader = parent.contextClassLoader;
+        this.inheritedAccessControlContext =
+                acc != null ? acc : AccessController.getContext();
+        this.target = target;
+        setPriority(priority);
+        //将父线程的inheritableThreadLocals复制过来
+        if (inheritThreadLocals && parent.inheritableThreadLocals != null)
+            this.inheritableThreadLocals =
+                ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
+        /* Stash the specified stack size in case the VM cares */
+        this.stackSize = stackSize;
+
+        /* Set thread ID */
+        tid = nextThreadID();
+    }
+```
+
+一个新构造的线程对象是由其parent线程来进行空间分配的，而child线程继承了parent是否为Daemon、优先级、加载资源的contextClassLoader、以及可继承的ThreadLocal，同时还分配一个唯一个标识这个child线程
+至此，一个能运行的线程对象就初始化好了，在堆内存中等待着运行。
+ 
+##### 4.2.2 启动线程
+线程对象在初始化完成之后，调用start()方法就可以启动这个线程了，线程start()方法包含的意义：当前线程(parent线程)同步告知JVM虚拟机只要线程规划器空闲，应立即启动调用start
+()方法的线程。
+注意：启动一个新线程，最好给这个线程设置线程名，因为这样在使用jstack分析程序或进行问题排查时，就会给开发人员提供一些提示，自定义的线程最好能够起个名字
+##### 4.2.3 理解中断
+中断可以理解为线程的一个标识位属性，它表示一个运行中的线程是否被其他线程进行了中断操作，中断操作好比其他线程对该线程打理个招呼，其他线程通过调用该线程的interrupt()方法进行中断操作
+线程通过检查自身是否被中断来进行响应。线程通过方法idInterrupted()来进行判断是否被中断，也可以调用静态方法Thread.interrupted()对当前线程的中断标识位进行复位。如果该线程处于终结状态，即使该线程被中断过，在调用该对象的isInterrupted()时依旧会返回false。
+从Java API中可以看到许多声明抛出interruptedException的方法，Java虚拟机会先去该线程的中断标识位清除，然后抛出。InterruptedException,此时调用isInterrupted()方法将会返回false；
+
+```java
+
+
+package com.da.study01;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Created by guo on 2018/1/30.
+ * 中断标识位
+ */
+public class Interrupted {
+    public static void main(String[] args) throws Exception {
+        //SleepThrea不停的尝试睡眠
+        Thread sleepThread = new Thread(new SleepRunner(), "SleepRunner");
+        sleepThread.setDaemon(true);
+        //busy不行的运行
+        Thread busyThread = new Thread(new BusyRunner(),"BusyRunner");
+        busyThread.setDaemon(true);
+        sleepThread.start();
+        busyThread.start();
+        //休眠5秒后让sleepThread和busyThread充分运行
+        SleepUtil.second(5);
+        sleepThread.interrupt();
+        busyThread.interrupt();
+        System.out.println("SleepThread interrupted is " + sleepThread.isInterrupted());
+        System.out.println("busyThread interrupted is " + busyThread.isInterrupted());
+        //防止sleepThread和busyThread立即退出
+        SleepUtil.second(2);
+    }
+    //一直在睡眠状态
+    static class SleepRunner implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                SleepUtil.second(10);
+            }
+        }
+    }
+    //y一直在运行
+    static class BusyRunner implements Runnable {
+        @Override
+        public void run() {
+            while (true){
+            }
+        }
+    }
+}
+
+```
+
+```
+输出如下：
+SleepThread interrupted is false
+java.lang.InterruptedException: sleep interrupted
+busyThread interrupted is true
+
+```
+
+从结果可以看出，抛出InterruptedException的线程是SleepThread，其中断标识位被清除了，而一直忙碌运作的线程busyThread中断标识位没有被清除
+
+ ##### 4.2.4 过期的suspend()、resume()、和stop()
+ 
+ 把CD播放音乐比作一个线程的运行，那么对音乐的暂停，恢复，停止操作对应在线程Thread的API就是suspent()、resume（）、stop()
+ 这些API是过期的，不建议使用，不建议使用的原因如下：
+ 
+ 以suspend()为例，在调用后，线程不会释放已占有的资源(比如锁),而是站有着资源进入睡眠状态，这样容易引发死锁问题，
+ 同样，stop()方法在终结一个线程不会保证线程的资源正常释放。**通常是没有给予线程完成资源释放的机会**。因此会导致程序可能工作在不确定状下。
+ 
+ #####4.2.5
+ 中断状态是线程的一个标识位，而中断操作是一种简便的线程间交互方式，而这种交互最适合来取消或停止任务，除了中断以外，还可以利用一个boolean变量来控制是否要停止任务并终止该线程
+ 
+ ```java
+package com.da.study01;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Created by guo on 2018/1/30.
+ */
+public class Shutdown {
+    public static void main(String[] args) throws InterruptedException {
+        Runner one = new Runner();
+        Thread countThread = new Thread(one,"CountThread");
+        countThread.start();
+        //睡眠一秒，main线程对CountThread进行中断，使CountThread能够感知中断而结束
+        TimeUnit.SECONDS.sleep(1);
+        countThread.interrupt();
+        Runner two  = new Runner();
+        countThread = new Thread(two,"CountThrad");
+        countThread.start();
+
+        //睡眠1秒main线程对Runner two 进行取消，使得CountThread能够感知on为false而结束
+        TimeUnit.SECONDS.sleep(1);
+        two.cancel();
+    }
+
+    private static class Runner implements Runnable {
+        private long i;
+        private volatile boolean on = true;
+
+        @Override
+        public void run() {
+            while (on && !Thread.currentThread().isInterrupted()) {
+                i++;
+            }
+            System.out.println("Count i = " + i);
+        }
+
+        public void cancel() {
+
+            on = false;
+        }
+
+    }
+}
+
+```
+```
+输出内容如下：
+Count i = 438939423
+Count i = 472801839
+
+```
+示例在执行过程中，main线程通过中断操作和cancel()方法均可以使得CountThread得以终止，
+这种通过标识位和中断操作的方式能够使线程在终止时有机会去清理资源，而不是武断地将线程停止。因此这种终止线程的做法显得更加安全和优雅
+
+#### 4.3线程间的通信
+线程开始运行，拥有自己的栈空间，就如同一个脚本一样，按照既定的代码一步一步的执行，直到终止。但是每个运行中的线程，如果仅仅是孤独的运行，那么没有一点价值，如果多个线程可以相互配合完成工作，这将带来巨大的价值
+
+#####4.3.1volatile和synchronized关键字
+Java支持多个线程同时访问一个对象或者对象的成员变量，由于每个线程可以拥有这个变量的拷贝(虽然对象以及成员变量分配的内存是在共享内存中，但是每个线程都可以拥有一份拷贝，这样做的目的是加速程序的执行，这时候现代处理器的一个显著特性)，
+所以程序在执行过程中，一个线程看到的变量并不一定是最新的 <br>
+- 关键字volatile可以用来修饰字段(成员变量)，就是告知程序任何对访问该变量的访问均需要从主内存中获取，而对他的改变必须同步刷回共享内存，它能保证所有线程对变量访问的可见性。过多的使用volatile是不必要的，因为他会降低程序执行的效率
+- 关键字synchronized可以修饰方法，或者以同步代码块的形式来进行使用，它主要确保多个线程在同一时刻，只能有一个线程处于方法或者同步代码块中，它保证了线程对该变量访问的可见性和排它性。
+
+
+```java
+package com.da.study01;
+
+/**
+ * Created by guo on 2018/1/30.
+ */
+public class Synchronized {
+    public static void main(String[] args) {
+        //对synchronized Class对象进行加锁
+        synchronized (Synchronized.class) {
+        }
+        //静态同步方法，对Synchronized Class对象进行加锁
+        m();
+    }
+    public static synchronized void m() {
+
+    }
+}
+
+```
+```
+在同级目录使用javap -v Synchronized.class 
+    
+    public static void main(java.lang.String[]);
+      descriptor: ([Ljava/lang/String;)V
+      //方法修饰符，表示 public static
+      flags: ACC_PUBLIC, ACC_STATIC
+      Code:
+        stack=2, locals=3, args_size=1
+           0: ldc           #2                  // class com/da/study01/Synchronized
+           2: dup
+           3: astore_1
+           4: monitorenter                      //监视器进入，获取锁
+           5: aload_1
+           6: monitorexit                       //监视器退出，释放锁
+           7: goto          15
+          8: return
+       
+    public static synchronized void m();
+      descriptor: ()V
+      //方法洗师傅，表示public static synchronized void m()
+      flags: ACC_PUBLIC, ACC_STATIC, ACC_SYNCHRONIZED
+      Code:
+        stack=0, locals=0, args_size=0
+           0: return
+           
+```
+对于同步代码块的实现使用了monitorenter和monitorexit指令，而同步方法则是依靠方法修饰符上的ACC_SYNCHRONIZED来完成的
+无论采用哪一种，其本质是对一个对象监视器(monitor)进行获取，而这个获取是排他的，也就是同一时刻只能有一个线程获取到由synchronized所保护的监视器<br>
+任意一个对象都拥有自己的监视器，当这个对象由同步代码块或者这个对象的同步方法调用时，执行的方法必须先获取到该对象的监视器才能进入到同步代码块。
+而没有获取到监视器的线程将会被阻塞在同步块和同步方法的入口处，进入BLOCKED状态
+
+##### 4.3.2 等待/通知机制
+一个线程修改了一个对象的值，而另一个线程感知到了变化，然后进行相应的操作。整个过程开始于一个线程，而最终执行又是另一个线程。前者是生产者，后者是消费者，<br>
+等待/通知相关的方法是任意对象都具备的，因为这些方法被定义在所有对象的超类java.lang.Object上，有以下方法：
+
+- notify()通知一个在对象上等待的线程，使其从wait()方法返回，而返回的前提是该线程获得了对象的锁
+- notifyAll() 通知所有等待在该对象上的线程
+- wait() 调用该方法进入WAITING状态，只有等待另外的线程通知或被中断才会返回。**调用wait()方法，会释放掉锁**
+- wait(long) 超时等待一段时间，这里的参数是毫秒，如果没有通知就超时返回
+- wait(long int) 对于超时时间更加细粒度的控制，可以达到纳秒级
+
+等待/通知机制，是指一个线程A调用了对象O的wait()方法，进入等待状态，而另外一个线程B调用了O的notify()或notifyAll()方法，线程A收到通知后从对象O的wait()方法返回
+进而执行后续的操作。上述两个线程通过对象Olai完成交互，而对象上的wait()和notify()/notifyAll()的关系就如同开关信号一样，用来完成等待方和通知方之间的关系
+
+使用wait()、notify()、notifyAll()时需要注意的细节：
+
+- 1.使用wait()、notify()、notifyAll()时需要下对调用对象加锁
+- 2.调用wait()方法后，线程状态由RUNNING变为WAITING，并将当前线程放入到对象的等待队列中
+- 3.notify()或nitifyAll()方法调用后，等待线程依旧不会从wait()放回，需要调用notify()、notifyAll()的线程释放掉锁之后，等待线程才有机会从wait()放回
+- 4.notify()方法将等待队列中的一个等待线程从等待队列中移到同步队列中，而notifyAll()方法则是将等待队列中所有的线程全部移到同步队列，被移动的线程状态由WAITING变为BLOCKED。
+- 5.从wait()方法返回的前提是获得了调用对象的锁)
+
+从上述细节可以看出，**等待/通知机制依托于同步机制，其目的就是确保等待线程从wait()方法返回时，能够感知到通知线程对变量所作的修改。**
+
+##### 4.3.3等待/通知的经典范式
+该范式分为两部分，分别为等待方(消费者)、通知方(生产者) <br>
+等待方遵循如下规则：
+
+- 1）获取对象的锁
+- 2）如果条件不满足，那么调用对象的wait()方法，被通知后仍然要检查条件
+- 3）条件满足则执行相应的逻辑
+
+对应的伪代码如下：
+
+```java
+synchronized(对象){
+    while(条件不满足) {
+        对象.wait();
+    }
+    对应的逻辑代码
+}
+
+```
+通知方遵循如下规则：
+
+- 1）获取对象的锁
+- 2）改变条件
+- 3）通知所有等待在该对象上的线程
+
+对应的伪代码如下：
+
+```java
+
+synchronized(对象){
+   改变条件
+   对象.notifyAll();
+}
+```
+
+
+
+
+
+
 
 
