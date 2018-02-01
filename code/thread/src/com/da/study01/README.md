@@ -595,7 +595,99 @@ synchronized(对象){
 }
 ```
 
+#####4.3.4管道的输入/输出流
+它主要用于线程之间的数据传输，而传输的媒介是内存
+管道输入输出流主要包含以下四中具体的实现：PipedOutputStream，PipedInputStream,PipedReader,PipedWriter,前面两种面向字节，而后两种面向字符
 
+ ```java
+ package com.da.study01;
+ 
+ import java.io.IOException;
+ import java.io.PipedReader;
+ import java.io.PipedWriter;
+ 
+ /**
+  * Created by guo on 2018/1/31.
+  * 作用：用来接收main线程的输入，任何main线程的输入均可以通过PipedWriter,而PrintThread在另一端通过PipedReader读出并打印
+  */
+ public class Piped {
+     public static void main(String[] args) throws IOException {
+         PipedWriter out = new PipedWriter();
+         PipedReader in = new PipedReader();
+         //将输入和输出流进行连接 ，否则在使用中会抛出IOException
+         out.connect(in);
+         Thread PrintThread = new Thread( new Print(in),"PrintThread");
+         PrintThread.start();
+         int receive = 0;
+         try {
+             while ((receive = System.in.read()) != -1) {
+                 out.write(receive);
+             }
+         } finally {
+             out.close();
+         }
+     }
+     static class Print implements Runnable {
+         private PipedReader in;
+         public Print(PipedReader in) {
+             this.in = in ;
+         }
+         @Override
+         public void run() {
+             int receive = 0;
+                 try {
+                     while ((receive = in.read()) != -1) {
+                         System.out.print((char) receive);
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+         }
+     }
+ }
+
+ //原样输出
+```
+
+对于Piped类型的流，必须先要进行绑定，也就是调用connect()方法，如果没有绑定，则会抛出IOException异常
+
+#####4.3.6ThreadLocal的使用
+ThreadLocal,即线程变量，是一个以ThreadLocal对象为键，任意对象位置的存储结构
+，这个结构被附带在线程上，也就是说一个线程可以更具一个ThreadLocal对象查询到绑定这个线程上的一个值<br>
+可以通过set(T)方法来设置一个值，在当前线程下在通过get()方法获取到原来的值。
+
+
+#### 线程应用实例
+
+##### 4.4.1等待超时模式
+调用一个方法时等待一段时间(时间段)，如果该方法在给定的时间内得到结果，那么将结果立刻返回，反之，超时返回默认结构
+```java
+
+//假设超时段是T,那么可以推断出在当前时间now+T之后就会失效
+定义如下变量
+ 等待持续时间：REMAINING =T
+ 超时时间：FUTURE = NOW + T
+ 
+ 这时只需要wait(REMAINING)即可，在wait(REMAINING)返回之后会将执行：
+REMAINING=FUTURE–now。如果REMAINING小于等于0，表示已经超时，直接退出，
+否则将继续执行wait(REMAINING)。
+
+上述描述等待超时模式的伪代码如下：
+ // 对当前对象加锁
+ public synchronized Object get(long mills) throws InterruptedException {
+         long future = System.currentTimeMillis() + mills;
+         long remaining = mills;
+         // 当超时大于0并且result返回值不满足要求
+         while ((result == null) && remaining > 0) {
+         wait(remaining);
+          remaining = future - System.currentTimeMillis();
+         }
+         return result;
+ }
+
+```
+可以看出，等待超时模式就似乎和在等待/通知范式基础上增加了超时控制，这使得该模式变比原有的范式更具灵活性，
+因为即使方法执行时间过长，也不会“永久”阻塞调用者，而是会按照调用者的要求按时返回。
 
 
 
