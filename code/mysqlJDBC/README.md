@@ -1,0 +1,201 @@
+## 1、什么是持久化(Persistence)?
+
+  持久化(Persistence):把数据保存到可掉电式存储设备中以供之后使用。
+
+大多数情况下，数据持久化意味着将内存中的数据保存到硬盘上加以“固化”，而持久化的实现过程大多通过各种关系型数据库完成
+
+持久化的主要应用是将内存中的数据存储子关系型数据库中，当然也可以存储在磁盘文件，XML数据文件中。
+
+    - JPA： Java EE的规范。Java Persisteeence API：Java的持久化，Hibernate实现类该规范
+
+在Java中，数据库存取技术只能通过JDBC访问数据库
+
+      JDBC访问数据库的形式主要有两种：
+          - 直接使用JDBC的API去访问数据库服务器
+          - 间接的使用JDBC的API去访问数据库服务器
+              第三方O/R Maping工具，如Hibernate，MyBatis等，(底层依然是JDBC)
+              JDBC是访问数据库的基石，其他技术都是对JDBC的封装
+
+## 2、什么是JDBC？
+
+JDBC(Java DataBase Connectivity)：
+
+    - 是一种用于执行SQL语句的Java API，可以为多种关系型提供统一的访问，它由一组用Java语言编写的的类和接口组成。
+    - JDBC提供了一种基准，据此可以构建更高级的工具和接口，使得数据库开发人员能够编写数据库应用程序
+    - JDBC为访问不同的数据库提供了一种统一的途径，为开发者屏蔽了一些细节实现。
+
+JDBC的目标使得Java程序员使用JBC可以连接任何提供了JBC驱动程序的数据库，这样就使得程序员无需对特定的数据库系统的特点有过多的了解，从而简化和加快了开发过程。
+
+总结：JDBC本身是Java数据库的一个标准，是进行数据库连接的抽象层，由Java编写的一组类和接口组成，接口的实现由各个数据库厂商来完成
+
+
+## jdbc连接oracle、mysql等主流数据库的驱动类和url
+
+    -----------------------------------------------------------
+    oracle
+    driverClass：oracle.jdbc.driver.OracleDriver
+    url：jdbc:oracle:thin:@127.0.0.1:1521:dbname
+
+    -----------------------------------------------------------
+    mysql  
+    driverClass：com.mysql.jdbc.Driver
+    url：jdbc:mysql://localhost:3306/mydb
+
+    -----------------------------------------------------------
+    PS：有的时候，mysql的驱动类也也会看到使用org.gjt.mm.mysql.Driver的情况，
+    org.gjt.mm.mysql.Driver是早期的驱动名称，后来就改名为com.mysql.jdbc.Driver，
+    现在一般都推荐使用 com.mysql.jdbc.Driver。在最新版本的mysql jdbc驱动中，为了保持对老版本的兼容，    仍然保留了org.gjt.mm.mysql.Driver，但是实际上 org.gjt.mm.mysql.Driver中调用   了com.mysql.jdbc.Driver，因此现在这两个驱动没有什么区别。
+
+    -----------------------------------------------------------
+    DB2
+    driverClass：com.ibm.db2.jcc.DB2Driver
+    url：jdbc:db2://127.0.0.1:50000/dbname
+    -----------------------------------------------------------
+    syBase
+    driverClass：com.sybase.jdbc.SybDriver
+    url：jdbc:sybase:Tds:localhost:5007/dbname
+    -----------------------------------------------------------
+    PostgreSQL
+    driverClass：org.postgresql.Driver
+    url：jdbc:postgresql://localhost/dbname
+    -----------------------------------------------------------
+    Sql Server2000
+    driverClass：com.microsoft.jdbc.sqlserver.SQLServerDriver
+    url：jdbc:microsoft:sqlserver://localhost:1433;DatabaseName=dbname
+    -----------------------------------------------------------
+    Sql Server2005
+    driverClass：com.microsoft.sqlserver.jdbc.SQLServerDriver
+    url：jdbc:sqlserver://localhost:1433; DatabaseName=dbname
+    -----------------------------------------------------------
+
+## 3、使用JDBC步骤
+
+1、拷贝MySQL的驱动到Java项目中：mysql-connector-java-5.1.17-bin.jar
+
+ 2、选择jar，把jar添加到CLASSPATH路径中
+
+JDBC操作第一步：获取JDBC连接对象/Connection对象
+
+操作步骤：
+
+1、加载注册驱动
+
+- Class.forName("com.mysql.jdbc.Driver")
+
+    - 把com.mysql.jdbc.Driver这一份字节码加载到JVM
+    - 当一份字节码被加载进JVM，就会执行其静态代码块
+    - 带层的静态代码块完成注册驱动工作，如下所示：
+
+```java
+public class Driver extends NonRegisteringDriver implements java.sql.Driver {
+public Driver() throws SQLException {}
+static {
+    try {
+      //调用驱动管理中的registerDriver方法
+        DriverManager.registerDriver(new Driver());
+    } catch (SQLException var1) {
+        throw new RuntimeException("Can't register driver!");
+    }
+  }
+}
+
+```
+
+2、获取连接
+
+    - 通过DriverManager的getConnection()方法创建Connection连接对象
+
+    - Connection conn = DriverManager.geteConnection(String url,String user，String password)
+          - url ：jdbc:mysql://localhost：3306/数据库名称
+          - user：root
+          - password：admin
+
+  Connection接口：A connection (session) with a specific database. SQL statements are executed and results are returned within the context of a connection.
+
+      - Statement createStatement() //Creates a Statement object for sending SQL statements to the database.
+
+      - PreparedStatement prepareStatement(String sql)  //Creates a PreparedStatement object for sending parameterized SQL statements to the database.
+
+      - void setAutoCommit(boolean autoCommit) //Sets this connection's auto-commit mode to the given state.
+
+      - void commit()   //Makes all changes made since the previous commit/rollback permanent and releases any database locks currently held by this Connection object.
+
+      - void rollback() //Undoes all changes made in the current transaction and releases any database locks currently held by this Connection object.
+
+      - void close()  //释放资源
+ 3、获取SQL语句
+
+ 4、编译执行
+
+  Statement接口：The object used for executing a static SQL statement and returning the results it produces.
+
+      - ResultSet executeQuery(String sql) //Executes the given SQL statement, which returns a single ResultSet object.
+
+      - int executeUpdate(String sql) //Executes the given SQL statement, which may be an INSERT, UPDATE, or DELETE statement or an SQL statement that returns nothing, such as an SQL DDL statement.
+
+      - void 	close() //释放资源
+  ResultSet接口： A table of data representing a database result set, which is usually generated by executing a statement that queries the database.
+
+      - String getString(int columnIndex) //Retrieves the value of the designated column in the current row of this ResultSet object as a String in the Java programming language.
+
+      - Xxx getXxx(xxx columnIndex))   //
+      - boolean 	next() //Retrieves whether the current row has been updated.
+
+      - void close() //释放资源
+ 5、释放资源
+
+1、JDK7新增的特性，可以把需要操作的资源写在try()里面，资源会自动关闭，因为实现类AutoException接口
+
+```java
+try(
+         //第二步：获取连接对象
+         Connection conn = DriverManager.getConnection(url,user,passwd);
+         //第三步：获取对象语句
+         Statement st = conn.createStatement();
+         //第四步：执行语句，获取结果集
+         ResultSet rs = st.executeQuery(sql);
+
+ ){
+
+     }
+ }catch (Exception e) {
+     e.printStackTrace();
+ }
+```
+
+2、在finally{}里面关闭,看着就头疼那。
+
+```java
+try{
+            //第一步：加载注册驱动
+            Class.forName("com.mysql.jdbc.Driver");
+            //第二步：获取连接对象
+            conn = DriverManager.getConnection(url, user, passwd);
+            //第三步：创建语句对象
+            st = conn.createStatement();
+            //第四步：执行SQL语句,并返回结果
+            String sql = " CREATE TABLE `t_student` (`id` bigint(20) PRIMARY KEY AUTO_INCREMENT,`name` varchar(20),`age` int(11)) ";
+            int i = st.executeUpdate(sql);
+
+        }catch(Exception e) {
+               e.printStackTrace();
+        } finally {
+            //第五步：释放资源
+            if (st != null) {
+                try {
+                    st.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }finally {
+                    if (conn != null) {
+                        try{
+                            conn.close();
+                        }catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+
+        }
+```
